@@ -1,0 +1,247 @@
+---
+title: 'Data 501: Final Project'
+authors: "Lulia Aklilu and Aiesha Ayub"
+date: "12/20/2024"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r} 
+library(tidyverse) #Loading the libraries
+library(ggplot2)
+library(stats)
+library(corrplot)
+library(purrr)
+library(tidyr)
+library(caret)
+install.packages("car")
+library(car)
+```
+
+```{r}
+df <- read.csv("spotify_data.csv")
+head(df)
+str(df)
+summary(df)
+```
+# Histogram of Numeric Features
+```{r}
+# Convert 'liked' to a factor
+df$liked <- as.factor(df$liked)
+
+# Filter numeric columns using purrr::keep
+numeric_data <- purrr::keep(df, is.numeric)
+
+# Gather the numeric columns into a long format
+gathered_data <- tidyr::gather(numeric_data)
+
+# Create the plot with new axis labels and title
+ggplot(gathered_data, aes(value)) +
+  geom_histogram(bins = 30, fill = "darkseagreen", color = "white") +
+  facet_wrap(~ key, scales = "free") +
+  labs(
+    title = "Distribution of Features",
+    x = "Feature Values",
+    y = "Frequency"
+  ) +
+  theme_minimal()
+```
+# Correlation Plot
+```{r}
+# Convert liked to numeric
+df$liked_numeric <- as.numeric(as.character(df$liked))
+
+# Create a new data frame with the selected features and liked_numeric
+selected_df <- df %>% select(danceability, energy, valence, tempo, liked_numeric)
+
+# Compute the correlation matrix for the selected features, including liked_numeric
+cor_matrix_selected <- cor(selected_df)
+
+# Plot the correlation matrix with coefficients displayed
+corrplot(cor_matrix_selected, 
+         method = "color", 
+         type = "upper", 
+         tl.col = "black", 
+         tl.srt = 45, 
+         addCoef.col = "black",  # Display coefficients in black color
+         number.cex = 0.8)       # Adjust text size of coefficients
+```
+
+# Scatterplots
+```{r}
+library(ggplot2)
+
+# Scatterplot: Danceability vs Valence
+ggplot(df, aes(x = danceability, y = valence, color = liked)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE) +  # Add regression line
+  labs(title = "Scatterplot of Danceability vs Valence",
+       x = "Danceability",
+       y = "Valence") +
+  scale_color_manual(values = c("0" = "indianred3", "1" = "lightblue3"), 
+                     name = "Liked") +  # Change colors and add legend title
+  theme_minimal()
+
+# Scatterplot: Danceability vs Energy
+ggplot(df, aes(x = danceability, y = energy, color = liked)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE) +  # Add regression line
+  labs(title = "Scatterplot of Danceability vs Energy",
+       x = "Danceability",
+       y = "Energy") +
+  scale_color_manual(values = c("0" = "indianred3", "1" = "lightblue3"), 
+                     name = "Liked") +  # Change colors and add legend title
+  theme_minimal()
+```
+
+# Pairwise scatter plot
+```{r} 
+pairs(numeric_df) # Pairwise scatter plot
+```
+
+# Logistic Regression (Full Model)
+```{r} 
+set.seed(123) #splits the df into training and testing sets
+train_index <- createDataPartition(df$liked, p=0.8, list = FALSE)
+train_data <- df[train_index, ]
+test_data <- df[-train_index, ]
+```
+
+```{r}
+model <- glm(liked ~ danceability + energy + loudness + speechiness + acousticness + instrumentalness + liveness + valence + tempo + duration_ms + key + mode + time_signature, data = train_data, family = binomial)
+
+summary(model) # fits a logistic regression model for the full model
+```
+
+
+```{r}
+predictions <- predict(model, test_data, type ="response")
+predicted_classes <- ifelse(predictions > 0.5,1,0)
+
+confusionMatrix(as.factor(predicted_classes), test_data$liked) 
+# makes prediction using the model and evaluates performance in a confusion matrix
+```
+
+
+```{r}
+accuracy <- mean(predicted_classes == test_data$liked) #prints the accuracy
+print(paste("Accuracy:", round(accuracy,4)))
+```
+
+
+```{r}
+library (pROC)
+
+roc_curve <- roc(test_data$liked, predictions) # ROC curve for the predictions
+plot(roc_curve, col="blue")
+```
+Area under the curve: 0.9526
+
+```{r}
+auc(roc_curve) # auc curve
+```
+
+
+```{r}
+plot(model) #plots the full model
+```
+
+# Logistic Regression (Full Model with Interaction Term)
+```{r}
+df <- read.csv("spotify_data.csv")
+head(df)
+df$liked <- as.factor(df$liked)
+```
+
+```{r}
+set.seed(130) #splits the df into training and testing sets
+train_index <- createDataPartition(df$liked, p=0.8, list = FALSE)
+train_data <- df[train_index, ]
+test_data <- df[-train_index, ]
+```
+
+```{r}
+model2 <- glm(liked ~ danceability * valence + energy + loudness + speechiness + acousticness + instrumentalness + liveness + tempo+ duration_ms  + key + mode, data = train_data, family = binomial)
+
+summary(model2) # logistic regression model with interaction term
+```
+
+
+```{r}
+predictions2 <- predict(model2, test_data, type ="response") # makes prediction using the model and evaluates performance in a confusion matrix
+predicted_classes2 <- ifelse(predictions2 > 0.5,1,0)
+
+confusionMatrix(as.factor(predicted_classes2), test_data$liked)
+```
+
+```{r}
+accuracy2 <- mean(predicted_classes2 == test_data$liked) #finds and prints accuracy
+print(paste("Accuracy:", round(accuracy2,4)))
+```
+
+
+```{r}
+roc_curve2 <- roc(test_data$liked, predictions2) # finds and plot roc curve
+plot(roc_curve2, col="blue")
+```
+Area under the curve: 0.9763
+```{r}
+auc(roc_curve2) #prints roc curve
+```
+
+```{r}
+plot(model2) #plots the model
+```
+
+#ANOVA Test
+```{r}
+anova_test <- anova(model, model2) #performs the anova test on both models
+print(anova_test)
+```
+
+# Diagnostic Plots
+```{r}
+# Residuals vs. Fitted Values Plot
+ggplot(data = train_data, aes(x = fitted(model), y = residuals(model))) +
+  geom_point(alpha = 0.7) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Residuals vs. Fitted Values",
+       x = "Fitted Values",
+       y = "Residuals") +
+  theme_minimal()
+
+# Q-Q Plot
+# Extract residuals
+residuals <- residuals(model, type = "deviance")
+
+qqnorm(residuals, main = "Q-Q Plot of Residuals")
+qqline(residuals, col = "red", lwd = 2)
+
+# Scale-Location Plot
+ggplot(data = train_data, aes(x = fitted(model), y = sqrt(abs(residuals(model))))) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "loess", se = FALSE, color = "blue") +
+  labs(title = "Scale-Location Plot",
+       x = "Fitted Values",
+       y = "Square Root of Standardized Residuals") +
+  theme_minimal()
+
+# Residuals vs. Leverage
+# Cook's distance
+cooks_dist <- cooks.distance(model)
+
+ggplot(data = train_data, aes(x = hatvalues(model), y = residuals(model))) +
+  geom_point(aes(size = cooks_dist), alpha = 0.7) +
+  scale_size_continuous(range = c(1, 5)) +
+  labs(title = "Residuals vs. Leverage",
+       x = "Leverage",
+       y = "Residuals",
+       size = "Cook's Distance") +
+  theme_minimal()
+```
+
